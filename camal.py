@@ -17,6 +17,13 @@ import cPickle as pickle
 starlist = {}
 starlist['test'] = [114.825498,5.224988]
 starlist['PROCYON'] = [114.825498,5.224988]
+starlist['castor'] = [113.649472,31.888282]
+starlist['polaris'] = [37.954561, 89.264109]
+starlist['vega'] = [279.23,38.7] 
+starlist['altair'] = [297.7,8.87]
+starlist['arcturus'] = [213.9, 19.18]
+starlist['spica'] = [201.3,-11.16]
+starlist['regulus'] = [152.1,11.97]
 
 __all__ = ['gaussian','tophat','fxnmean','fxnvariance','plot_apertures', 'get_altitude']
 
@@ -54,8 +61,8 @@ def get_altitude(starname, timestr):
     RA =  starlist[starname][0] #deg
     DEC = np.abs(starlist[starname][1]) #deg
     #Philadelphia LAT LONG (change when go to MT Hopkins)
-    LAT  = 39.95 #deg
-    LONG = -75.15 #deg
+    LAT  = 31.6 #39.95 #deg
+    LONG = -110.9 #-75.15 #deg
     # date time must be UT (greenwich), everything in degrees, (long, lat)
     ###timestr = '2015-12-06T00.04.10.000'
     t=Time(timestr.replace(".", ":", 2), format='isot', 
@@ -75,6 +82,81 @@ def get_altitude(starname, timestr):
     return altitude,t
 
 
+def rebin(ccdim,mleft=None,mright=None):
+    'rebins ccd image as np.array from 1x1 to 2x2'
+    size = np.shape(ccdim)
+    if mleft==None:
+        mleft = np.zeros((size[0]/2,size[0]))
+        mright = np.zeros((size[1],size[1]/2))
+        for i in range(0,size[0]/2):
+            mleft[i,2*i] = 1
+            mleft[i,2*i+1] = 1
+        for i in range(0,size[1]/2):
+            mright[2*i,i] = 1
+            mright[2*i+1,i] = 1
+    tempout = np.dot(ccdim,mright)
+    return np.dot(mleft, tempout)
+    
+def getBinMatrix(size):
+    'input size of matrix'
+    mleft = np.zeros((size[0]/2,size[0]))
+    mright = np.zeros((size[1],size[1]/2))
+    for i in range(0,size[0]/2):
+        mleft[i,2*i] = 1
+        mleft[i,2*i+1] = 1
+    for i in range(0,size[1]/2):
+        mright[2*i,i] = 1
+        mright[2*i+1,i] = 1
+    return mleft,mright
 
 
 
+def cleanData(path2raw,night,object):
+    ' Remove bad points '
+    data = pyfits.open('%sfinalData_%s_%s.fits' %(path2raw,night,object))[1].data
+
+    # Load Variables/data
+    # -------------------                                                      
+    allflux = data['allflux']
+    allalt = data['allalt']
+    filter = data['filter']
+    expTime = data['expTime']
+    xcent = data['Xcenter']
+    ycent = data['Ycenter']
+    JD = data['JD']
+
+    # Divide into filters excluding nonconsecutive ones
+    # -------------------------------------------------                 
+    i=0
+    f780 = []
+    f823 = []
+    f860 = []
+    alt = []
+    time = []
+    while i < (len(allflux)-2):
+        if (24*3600*(JD[i + 2] - JD[i]) < ( 13.0 + sum(expTime[i:i+3]))) & (len(set(filter[i:i+3])) == 3) \
+                & (filter[i]=='Blue') & all(allflux[i:i+3] > 0):
+            f823.append(allflux[i])
+            f860.append(allflux[i+1])
+            f780.append(allflux[i+2])
+            time.append(JD[i])
+            alt.append(allalt[i])
+            i += 3
+        else:
+            print i
+            i += 1
+    ref = np.median(f780)
+    f780 = np.array(f780)/ref
+    f823 = np.array(f823)/ref
+    f860 = np.array(f860)/ref
+    
+    return time, f780, f823, f860
+
+def bindat(x,y,nbins):
+    n, bins = np.histogram(x, bins=nbins)
+    sy, _ = np.histogram(x, bins=nbins, weights=y)
+    sy2, _ = np.histogram(x, bins=nbins, weights=y*y)
+    bins = (bins[1:] + bins[:-1])/2
+    mean = sy / n
+    std = np.sqrt(sy2/n - mean*mean)
+    return bins,mean,std
