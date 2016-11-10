@@ -6,7 +6,7 @@ def send(subject,body,recipient='ashbaker@sas.upenn.edu',attachment=None):
     recipient  = recipient
     # login credentials ...should probably worry about this
     username = 'camal.telescope'
-    password = 'C@m@l!16'
+    password = ''
     # Prep email
     msg = MIMEText(body)
     msg['From']    = username
